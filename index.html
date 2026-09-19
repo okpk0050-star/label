@@ -1,0 +1,68 @@
+<!doctype html>
+<html lang="ko">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="description" content="엑셀 또는 CSV 주소 데이터를 브라우저에서 안전하게 우편 라벨 PDF로 만듭니다." />
+    <title>우편 라벨 만들기 | 엑셀 주소 라벨 PDF</title>
+  </head>
+  <body>
+    <main class="shell">
+      <header class="hero"><p class="eyebrow">브라우저에서만 처리</p><h1>우편 라벨 만들기</h1><p>엑셀·CSV를 올리거나 데이터를 붙여넣고, 라벨지에 맞는 PDF를 만드세요.</p><p class="privacy">입력한 데이터는 서버에 저장하거나 전송하지 않고 이 브라우저에서만 처리됩니다.</p></header>
+
+      <section class="card" aria-labelledby="input-title">
+        <div class="section-heading"><span>1</span><div><h2 id="input-title">데이터 입력</h2><p>Excel 파일을 선택하거나 탭·쉼표로 구분된 데이터를 붙여넣으세요.</p></div></div>
+        <div class="input-grid">
+          <label class="file-drop"><input id="file-input" type="file" accept=".xlsx,.xls,.csv" /><strong>엑셀 또는 CSV 파일 선택</strong><small>.xlsx · .xls · .csv / 파일은 업로드되지 않습니다</small></label>
+          <label class="paste-label" for="paste-input">직접 붙여넣기<textarea id="paste-input" rows="7" placeholder="홍길동\t02700\t서울특별시 성북구 테스트로 1"></textarea></label>
+        </div>
+        <div id="sheet-picker" class="sheet-picker hidden"><label for="sheet-select">시트 선택</label><select id="sheet-select"></select></div>
+        <div class="button-row"><button id="parse-paste" class="secondary">붙여넣기 데이터 불러오기</button></div>
+      </section>
+
+      <section id="data-section" class="card hidden" aria-labelledby="data-title">
+        <div class="section-heading"><span>2</span><div><h2 id="data-title">데이터 확인</h2><p id="data-summary"></p></div></div>
+        <label class="checkbox"><input id="has-header" type="checkbox" /> 첫 번째 행을 제목으로 사용</label>
+        <div id="mapping" class="mapping"></div>
+        <div id="warnings" class="notice hidden"></div>
+        <div class="table-wrap"><table id="data-table"></table></div>
+      </section>
+
+      <section id="label-section" class="card hidden" aria-labelledby="label-title">
+        <div class="section-heading"><span>3</span><div><h2 id="label-title">라벨 규격과 표시 설정</h2><p>폼텍 공식 Word 템플릿 좌표값을 기준으로 배치합니다.</p></div></div>
+        <div class="settings-grid">
+          <label>라벨 규격<select id="template-select"></select></label>
+          <button id="custom-toggle" class="secondary align-end">사용자 지정 규격</button>
+          <fieldset class="design"><legend>표시 항목</legend><label><input id="show-name" type="checkbox" checked /> 이름</label><label><input id="show-postcode" type="checkbox" checked /> 우편번호</label><label><input id="show-address" type="checkbox" checked /> 주소</label><label><input id="show-detail" type="checkbox" checked /> 상세주소</label><label><input id="show-guides" type="checkbox" checked /> PDF 라벨 점선</label></fieldset>
+          <label>글꼴 크기 <output id="font-size-output">11pt</output><input id="font-size" type="range" min="8" max="16" value="11" /></label>
+          <label>글꼴 굵기<select id="font-weight"><option value="normal">보통</option><option value="bold">굵게</option></select></label>
+          <label>정렬<select id="text-align"><option value="left">왼쪽</option><option value="center">가운데</option><option value="right">오른쪽</option></select></label>
+          <label>줄 간격<select id="line-height"><option value="1.2">좁게</option><option value="1.4" selected>보통</option><option value="1.6">넓게</option></select></label>
+          <label>가로 보정(mm)<input id="offset-x" type="number" min="-5" max="5" step="0.1" value="0" /></label>
+          <label>세로 보정(mm)<input id="offset-y" type="number" min="-5" max="5" step="0.1" value="0" /></label>
+        </div>
+        <div id="custom-fields" class="custom-grid hidden"></div>
+        <p id="template-error" class="error hidden"></p>
+      </section>
+
+      <section id="preview-section" class="card hidden" aria-labelledby="preview-title">
+        <div class="section-heading"><span>4</span><div><h2 id="preview-title">미리보기</h2><p id="preview-summary">첫 페이지를 표시합니다.</p></div></div>
+        <div class="preview-tools"><button id="previous-page" class="secondary">이전 페이지</button><span id="page-indicator"></span><button id="next-page" class="secondary">다음 페이지</button></div>
+        <section id="preview-edit" class="preview-edit hidden" aria-live="polite">
+          <div><strong id="preview-edit-title">라벨 수정</strong><p>미리보기의 <strong>수정</strong> 버튼을 눌러 한 건씩 내용을 바로 고칠 수 있습니다. 수정한 내용은 PDF와 인쇄에도 반영됩니다.</p></div>
+          <div class="preview-edit-fields">
+            <label>이름<input id="edit-name" type="text" autocomplete="off"></label>
+            <label>우편번호<input id="edit-postcode" type="text" inputmode="numeric" autocomplete="off"></label>
+            <label>주소<input id="edit-address" type="text" autocomplete="off"></label>
+            <label>상세주소<input id="edit-detail" type="text" autocomplete="off"></label>
+          </div>
+          <div class="button-row"><button id="save-preview-edit" class="primary" type="button">수정 반영</button><button id="reset-preview-edit" class="secondary" type="button">원본으로 되돌리기</button><button id="cancel-preview-edit" class="secondary" type="button">취소</button></div>
+        </section>
+        <div class="button-row export-row"><button id="print-preview" class="secondary">미리보기 인쇄</button><button id="export-pdf" class="primary">PDF 만들기</button><p>미리보기 인쇄는 현재 페이지를 바로 인쇄합니다. 인쇄할 때 <strong>배율 100% / 실제 크기</strong>를 선택하고 “페이지에 맞춤”은 해제하세요.</p></div>
+        <div class="preview-wrap"><div id="paper-preview" class="paper-preview" aria-label="A4 라벨 미리보기"></div></div>
+      </section>
+    </main>
+    <div id="toast" role="status" aria-live="polite"></div>
+    <script type="module" src="/src/main.js"></script>
+  </body>
+</html>
