@@ -27,3 +27,16 @@ test('does not strip common detailed-address forms', () => {
   const value = parseCombinedRecipient({ name: '홍길동 02700 서울특별시 성북구 종암로 10 B1 15F A동 S동 102-501 제7층 제701호 B-402' });
   assert.match(value.detail, /B1 15F A동 S동 102-501 제7층 제701호 B-402/);
 });
+
+test('splits an Excel-copied single-cell recipient row into label lines', () => {
+  const value = parseCombinedRecipient({ name: '홍길동 02700 서울특별시 성북구 종암로 10 101동 1001호', address: '홍길동 02700 서울특별시 성북구 종암로 10 101동 1001호' });
+  assert.deepEqual(value, { name: '홍길동', postcode: '02700', address: '서울특별시 성북구 종암로 10', detail: '101동 1001호' });
+});
+
+test('does not turn a four-digit road number into a postcode', () => {
+  const value = parseCombinedRecipient({ name: '한지민 서울특별시 노원구 동일로 1234 상계주공아파트 501동 1202호 01695' });
+  assert.deepEqual(value, { name: '한지민', postcode: '01695', address: '서울특별시 노원구 동일로 1234', detail: '상계주공아파트 501동 1202호' });
+  const withoutPostcode = parseCombinedRecipient({ name: '한지민 서울특별시 노원구 동일로 1234 상계주공아파트 501동 1202호' });
+  assert.equal(withoutPostcode.postcode, '');
+  assert.equal(withoutPostcode.address, '서울특별시 노원구 동일로 1234');
+});

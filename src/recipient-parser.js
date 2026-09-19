@@ -10,17 +10,30 @@ export function normalizePostalValue(value) {
 }
 
 function findPostalCandidate(text) {
-  const patterns = [
+  const explicitPatterns = [
     /우편번호\s*[:：]?\s*(\d{4,5})\b/,
     /\((\d{4,5})\)/,
-    /\[(\d{4,5})\]/,
-    /(?:^|\s)(\d{3}-?\d{2}|\d{4})(?=\s|$)/
+    /\[(\d{4,5})\]/
   ];
-  for (const pattern of patterns) {
+  for (const pattern of explicitPatterns) {
     const match = text.match(pattern);
     if (!match) continue;
     const value = normalizePostalValue(match[1]);
     if (value) return { value, index: match.index, length: match[0].length };
+  }
+
+  const addressStart = text.search(provincePattern);
+  // An unlabelled four-digit number after the province can be a road number.
+  // Before the address, four-digit Excel postal values are still accepted.
+  const prefix = addressStart < 0 ? text : text.slice(0, addressStart);
+  const beforeAddress = [...prefix.matchAll(/(?:^|\s)(\d{3}-?\d{2}|\d{4})(?=\s|$)/g)].at(-1);
+  if (beforeAddress) return { value: normalizePostalValue(beforeAddress[1]), index: beforeAddress.index, length: beforeAddress[0].length };
+
+  // A five-digit postcode can also follow a complete address. Do not infer a
+  // four-digit postcode in this position because it is ambiguous with roads.
+  if (addressStart >= 0) {
+    const trailing = text.match(/\s(\d{5})$/);
+    if (trailing) return { value: trailing[1], index: trailing.index, length: trailing[0].length };
   }
   return null;
 }

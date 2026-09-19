@@ -14,10 +14,10 @@
         <div class="section-heading"><span>1</span><div><h2 id="input-title">데이터 입력</h2><p>Excel 파일을 선택하거나 탭·쉼표로 구분된 데이터를 붙여넣으세요.</p></div></div>
         <div class="input-grid">
           <label class="file-drop"><input id="file-input" type="file" accept=".xlsx,.xls,.csv" /><strong>엑셀 또는 CSV 파일 선택</strong><small>.xlsx · .xls · .csv / 파일은 업로드되지 않습니다</small></label>
-          <label class="paste-label" for="paste-input">직접 붙여넣기<textarea id="paste-input" rows="7" placeholder="홍길동\t02700\t서울특별시 성북구 테스트로 1"></textarea></label>
+          <label class="paste-label" for="paste-input">엑셀 데이터 붙여넣기<textarea id="paste-input" rows="7" placeholder="엑셀에서 이름·우편번호·주소 열을 복사한 뒤 여기에 붙여넣으세요. 탭으로 구분된 셀을 자동으로 인식합니다."></textarea><small>붙여넣으면 자동으로 불러옵니다. 직접 입력하거나 수정한 뒤에는 아래 버튼을 누르세요.</small></label>
         </div>
         <div id="sheet-picker" class="sheet-picker hidden"><label for="sheet-select">시트 선택</label><select id="sheet-select"></select></div>
-        <div class="button-row"><button id="parse-paste" class="secondary">붙여넣기 데이터 불러오기</button></div>
+        <div class="button-row"><button id="parse-paste" class="secondary">입력한 데이터 불러오기</button></div>
       </section>
 
       <section id="data-section" class="card hidden" aria-labelledby="data-title">
@@ -31,7 +31,8 @@
       <section id="label-section" class="card hidden" aria-labelledby="label-title">
         <div class="section-heading"><span>3</span><div><h2 id="label-title">라벨 규격과 표시 설정</h2><p>폼텍 공식 Word 템플릿 좌표값을 기준으로 배치합니다.</p></div></div>
         <div class="settings-grid">
-          <label>라벨 규격<select id="template-select"></select></label>
+          <label>제조사<select id="manufacturer-select"></select></label>
+          <label>제품번호<select id="product-select"></select></label>
           <button id="custom-toggle" class="secondary align-end">사용자 지정 규격</button>
           <fieldset class="design"><legend>표시 항목</legend><label><input id="show-name" type="checkbox" checked /> 이름</label><label><input id="show-postcode" type="checkbox" checked /> 우편번호</label><label><input id="show-address" type="checkbox" checked /> 주소</label><label><input id="show-detail" type="checkbox" checked /> 상세주소</label><label><input id="show-guides" type="checkbox" checked /> PDF 라벨 점선</label></fieldset>
           <label>글꼴 크기 <output id="font-size-output">11pt</output><input id="font-size" type="range" min="8" max="16" value="11" /></label>
