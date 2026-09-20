@@ -33,6 +33,11 @@ test('splits an Excel-copied single-cell recipient row into label lines', () => 
   assert.deepEqual(value, { name: '홍길동', postcode: '02700', address: '서울특별시 성북구 종암로 10', detail: '101동 1001호' });
 });
 
+test('keeps a long institution and its department as the recipient name', () => {
+  const value = parseCombinedRecipient({ name: '중앙지방법원 서울지원 공탁계 (02700) 서울특별시 성북구 종암로 10-3 101동 1001호' });
+  assert.deepEqual(value, { name: '중앙지방법원 서울지원 공탁계', postcode: '02700', address: '서울특별시 성북구 종암로 10-3', detail: '101동 1001호' });
+});
+
 test('does not turn a four-digit road number into a postcode', () => {
   const value = parseCombinedRecipient({ name: '한지민 서울특별시 노원구 동일로 1234 상계주공아파트 501동 1202호 01695' });
   assert.deepEqual(value, { name: '한지민', postcode: '01695', address: '서울특별시 노원구 동일로 1234', detail: '상계주공아파트 501동 1202호' });

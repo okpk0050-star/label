@@ -19,6 +19,18 @@ npm run build
 
 `dist/` 디렉터리를 정적 호스팅에 배포하면 됩니다.
 
+## Cloudflare Pages 배포
+
+현재 서비스는 [postal-label-service.pages.dev](https://postal-label-service.pages.dev/)에 Direct Upload 방식으로 배포되어 있습니다. 코드 변경 후에는 Cloudflare 계정에 로그인한 환경에서 다음 명령으로 새 버전을 올립니다.
+
+```bash
+npm test
+npm run build
+npm exec --yes --package wrangler -- wrangler pages deploy dist --project-name postal-label-service --branch main
+```
+
+Direct Upload 프로젝트이므로 Git 저장소의 변경 사항은 자동 배포되지 않습니다.
+
 ## 구성
 
 - `index.html` — 화면 구조와 SEO 기본 메타데이터
@@ -40,17 +52,17 @@ PDF는 A4 `210 × 297mm` 좌표계로 생성됩니다. 라벨 위치는 mm 단�
 
 ## 기본 라벨 템플릿
 
-`src/templates.js`의 `LABEL_PRESETS`에는 폼텍 규격을 제조사 → 제품번호 구조로 모아두었습니다. `startX`/`startY`는 공식 HWPX 템플릿 분석을 바탕으로 한 초기값이므로, 실물 인쇄 테스트 뒤 이 파일 한 곳에서 조정할 수 있습니다.
+`src/templates.js`의 `LABEL_PRESETS`에는 폼텍 규격을 제조사 → 제품번호 구조로 모아두었습니다. 아래 시작점과 전체 그리드 크기는 제공받은 폼텍 HWPX 5개 양식의 좌표 환산값입니다. 원본 파일은 이 저장소에 포함되어 있지 않습니다. 실물 인쇄 후 조정이 필요하면 프리셋 한 곳에서 수정합니다.
 
-| 제품 | 배치 | 시작 여백(좌/상) | 라벨 | 가로/세로 간격 |
+| 제품 | 열 × 행 | 표기 라벨(mm) | 시작 X/Y(mm) | 그리드 W/H(mm) |
 | --- | --- | --- | --- | --- |
-| 폼텍 3107 | 2 × 8 | 4.7 / 14.2mm | 99.1 × 33.9mm | 2.5 / 0mm |
-| 폼텍 3105 | 3 × 7 | 8.0 / 15.8mm | 63.5 × 38.1mm | 2.5 / 0mm |
-| 폼텍 3106 | 3 × 8 | 6.5 / 12.5mm | 64 × 34mm | 2.5 / 0mm |
-| 폼텍 3108 | 2 × 7 | 5.0 / 13.8mm | 99.1 × 38.1mm | 2.5 / 0mm |
-| 폼텍 3109 | 2 × 9 | 3.7 / 13.5mm | 100 × 30mm | 2.5 / 0mm |
+| 폼텍 3105 | 3 × 7 | 63.5 × 38.1 | 8.001 / 15.804 | 195.495 / 266.700 |
+| 폼텍 3106 | 3 × 8 | 64 × 34 | 6.498 / 12.499 | 196.988 / 271.159 |
+| 폼텍 3107 | 2 × 8 | 99.1 × 33.9 | 4.699 / 14.196 | 200.702 / 271.159 |
+| 폼텍 3108 | 2 × 7 | 99.1 × 38.1 | 4.995 / 13.801 | 200.702 / 266.700 |
+| 폼텍 3109 | 2 × 9 | 100 × 30 | 3.697 / 13.497 | 202.494 / 269.081 |
 
-공식 근거: [폼텍 Word 사이즈 추가/수정 정보](https://www.formtec.co.kr/software/software_manual.html?board=manual&id=27&kw=&kw_name=&mode=read&page=2)
+가로 피치는 `(gridW - labelWidth) / (cols - 1)`, 세로 피치와 출력 칸 높이는 `gridH / rows`입니다. 시작점에 열·행 피치를 더한 같은 좌표를 미리보기와 PDF가 사용합니다. 제품 표기 높이로 행 위치를 누적하거나 A4 안에서 가운데 정렬하지 않습니다.
 
 ## 새 라벨 규격 추가
 
@@ -63,10 +75,10 @@ PDF는 A4 `210 × 297mm` 좌표계로 생성됩니다. 라벨 위치는 mm 단�
   rows: 8,
   labelWidth: 99.1,
   labelHeight: 33.9,
-  startX: 4.7,
-  startY: 14.2,
-  gapX: 2.5,
-  gapY: 0
+  startX: 4.699,
+  startY: 14.196,
+  gridW: 200.702,
+  gridH: 271.159
 }
 ```
 

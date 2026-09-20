@@ -2,15 +2,19 @@ import * as XLSX from 'xlsx';
 import { PDFDocument, rgb } from 'pdf-lib';
 import fontkit from '@pdf-lib/fontkit';
 import './style.css';
+import './ux.css';
 import '@fontsource/noto-sans-kr/400.css';
 import '@fontsource/noto-sans-kr/700.css';
-import { manufacturers, productsFor, presetTemplate, createCustomTemplate, validateTemplate } from './templates.js';
+import { manufacturers, productsFor, presetTemplate, createCustomTemplate, validateTemplate, labelGeometry } from './templates.js';
 import { normalizePostalValue, parseCombinedRecipient } from './recipient-parser.js';
-import { structurePastedRows } from './pasted-rows.js';
-import { PDF_TEXT_WIDTH_FACTOR, wrapPdfText } from './pdf-layout.js';
+import { parseRecipientCells, structurePastedRows } from './pasted-rows.js';
+import { inferColumnMappingWithConfidence } from './column-mapping.js';
+import { mappingAlertText } from './mapping-feedback.js';
+import { inspectLabelPages, labelPageSlots } from './pdf-layout.js';
+import { labelContent, layoutArrangement } from './label-arrangements.js';
 
 const $ = (selector) => document.querySelector(selector);
-const state = { rawRows: [], headers: [], hasHeader: false, mapping: { name: '', postcode: '', address: '', detail: '' }, manufacturer: 'formtec', product: '3105', template: presetTemplate('formtec', '3105'), custom: false, previewPage: 0, previewStats: { shrunk: 0, overflow: 0 }, previewEdits: new Map(), selectedEditSourceRow: null };
+const state = { rawRows: [], headers: [], hasHeader: false, mappingEdited: false, autoStructured: false, mapping: { name: '', postcode: '', address: '', detail: '' }, mappingConfidence: {}, manufacturer: 'formtec', product: '3105', template: presetTemplate('formtec', '3105'), custom: false, startSlot: 0, previewPage: 0, previewStats: { shrunk: 0, overflow: 0 }, previewEdits: new Map(), selectedEditSourceRow: null };
 const fields = ['name', 'postcode', 'address', 'detail'];
 const fieldNames = { name: '이름', postcode: '우편번호', address: '주소', detail: '상세주소' };
 const aliases = { name: ['이름', '성명', '수취인', '받는이', 'recipient', 'name'], postcode: ['우편번호', '우편 번호', '우편번호5자리', 'zip', 'zipcode', 'postal'], address: ['주소', '주소지', '소재지', 'address'], detail: ['상세주소', '상세 주소', '상세', '동호수', 'detail'] };
@@ -43,24 +47,9 @@ function detectMapping() {
   const data = state.rawRows.slice(state.hasHeader ? 1 : 0);
   state.mapping = { name: '', postcode: '', address: '', detail: '' };
   if (state.hasHeader) state.headers.forEach((header, index) => { const field = fieldForHeader(header); if (field && !state.mapping[field]) state.mapping[field] = String(index); });
-  const columns = state.headers.length;
-  for (let col = 0; col < columns; col += 1) {
-    const values = data.map((row) => cleanText(row[col])).filter(Boolean);
-    if (!values.length) continue;
-    const zipCount = values.filter((value) => /^\s*\d{3}-?\d{2}\s*$/.test(value)).length;
-    const addressCount = values.filter((value) => /(시|군|구|로|길|동|읍|면|리)/.test(value)).length;
-    if (!state.mapping.postcode && zipCount / values.length > 0.65) state.mapping.postcode = String(col);
-    if (!state.mapping.address && addressCount / values.length > 0.45) state.mapping.address = String(col);
-  }
-  if (!state.mapping.detail && state.mapping.address !== '') {
-    for (let col = 0; col < columns; col += 1) {
-      if (Object.values(state.mapping).includes(String(col))) continue;
-      const values = data.map((row) => cleanText(row[col])).filter(Boolean);
-      const detailCount = values.filter((value) => /(?:아파트|빌딩|오피스텔|\d+동|\d+호|\d+층)/.test(value)).length;
-      if (values.length && detailCount / values.length > 0.45) { state.mapping.detail = String(col); break; }
-    }
-  }
-  if (!state.mapping.name && columns) state.mapping.name = String([...Array(columns).keys()].find((i) => String(i) !== state.mapping.postcode && String(i) !== state.mapping.address) ?? 0);
+  const inference = inferColumnMappingWithConfidence(data, state.headers.length, state.mapping);
+  state.mapping = inference.mapping;
+  state.mappingConfidence = inference.confidence;
 }
 
 function dataRows() {
@@ -69,6 +58,10 @@ function dataRows() {
     const item = { sourceRow: rowIndex + start + 1 };
     fields.forEach((field) => { const col = state.mapping[field]; item[field] = col === '' || col === undefined ? '' : cleanText(row[Number(col)]); });
     splitCombinedRecipient(item);
+    if (!state.mappingEdited && (!item.name || !item.address || !normalizePostcode(item.postcode))) {
+      const recovered = parseRecipientCells(row);
+      if (recovered.name && recovered.address && normalizePostcode(recovered.postcode)) Object.assign(item, recovered);
+    }
     // Small corrections made from the preview take precedence over imported data
     // and are intentionally kept only in this browser session.
     const edit = state.previewEdits.get(item.sourceRow);
@@ -82,20 +75,32 @@ function eligibleRows() { return dataRows().filter((row) => row.valid); }
 
 function renderData() {
   $('#has-header').checked = state.hasHeader;
-  $('#data-summary').textContent = `${dataRows().length}개 행을 읽었습니다. 열을 확인하고 필요하면 변경하세요.`;
+  const allRows = dataRows();
+  const sourceCount = Math.max(0, state.rawRows.length - Number(state.hasHeader));
+  $('#data-summary').textContent = `총 ${sourceCount}건 · 처음 ${Math.min(sourceCount, 10)}건 표시`;
+  const rowIssues = allRows.filter((row) => !row.valid || !row.name || !row.postcodeNormalized).length;
+  const needsReview = rowIssues + Math.max(0, sourceCount - allRows.length);
+  const mappingAlert = $('#mapping-alert');
+  mappingAlert.textContent = mappingAlertText(sourceCount, needsReview, state.mappingConfidence, fieldNames);
+  mappingAlert.classList.toggle('hidden', !mappingAlert.textContent);
   const mapping = $('#mapping'); mapping.replaceChildren();
   fields.forEach((field) => {
     const label = document.createElement('label'); label.textContent = fieldNames[field];
     const select = document.createElement('select'); select.dataset.field = field;
     select.append(new Option('사용 안 함', ''));
-    state.headers.forEach((header, index) => select.append(new Option(header, String(index), false, state.mapping[field] === String(index))));
-    label.append(select); mapping.append(label);
+    state.headers.forEach((header, index) => { const example = state.rawRows.slice(state.hasHeader ? 1 : 0).map((row) => cleanText(row[index])).find(Boolean); const sample = example ? ` · 예: ${example.slice(0, 16)}${example.length > 16 ? '…' : ''}` : ''; select.append(new Option(`${header}${sample}`, String(index), false, state.mapping[field] === String(index))); });
+    const confidence = state.mappingConfidence[field] ?? 'missing';
+    const status = document.createElement('small'); status.className = `mapping-confidence${['medium', 'missing'].includes(confidence) ? ' needs-check' : ''}`;
+    status.textContent = ({ high: '✓ 자동 인식', medium: '? 확인 권장', missing: '? 열 선택 필요', manual: '✓ 직접 선택', optional: '' })[confidence];
+    status.classList.toggle('hidden', !status.textContent);
+    label.append(select, status); mapping.append(label);
   });
-  const rows = dataRows(); const missing = rows.filter((row) => !row.valid).length; const badZip = rows.filter((row) => row.postcode && row.postcodeNormalized === null).length; const missingZip = rows.filter((row) => row.valid && !row.postcode).length;
-  const messages = []; if (missing) messages.push(`주소가 없어 ${missing}개 행이 PDF에서 제외됩니다.`); if (badZip) messages.push(`5자리로 변환할 수 없는 우편번호가 ${badZip}개 있습니다.`); if (missingZip) messages.push(`우편번호를 확인해야 하는 행이 ${missingZip}개 있습니다. 미리보기에서 수정할 수 있습니다.`);
+  const rows = allRows; const missing = rows.filter((row) => !row.valid).length; const badZip = rows.filter((row) => row.postcode && row.postcodeNormalized === null).length; const missingZip = rows.filter((row) => row.valid && !row.postcode).length; const missingName = rows.filter((row) => row.valid && !row.name).length;
+  const health = $('#data-health'); health.textContent = needsReview ? `✓ 정상 ${sourceCount - needsReview}건 · ⚠ 확인 필요 ${needsReview}건` : `✓ ${sourceCount}건 정상 인식`;
+  const messages = []; if (missing) messages.push(`주소가 없어 ${missing}개 행이 PDF에서 제외됩니다.`); if (badZip) messages.push(`⚠ ${badZip}건의 우편번호를 확인해주세요.`); if (missingZip) messages.push(`⚠ ${missingZip}건의 우편번호를 확인해주세요. 미리보기에서 수정할 수 있습니다.`); if (missingName) messages.push(`⚠ ${missingName}건의 이름을 확인해주세요.`);
   const warning = $('#warnings'); warning.textContent = messages.join(' '); warning.classList.toggle('hidden', !messages.length);
-  const table = $('#data-table'); table.replaceChildren(); const header = document.createElement('tr'); state.headers.forEach((name) => { const th = document.createElement('th'); th.textContent = name; header.append(th); }); table.append(header);
-  state.rawRows.slice(state.hasHeader ? 1 : 0, (state.hasHeader ? 1 : 0) + 10).forEach((row) => { const tr = document.createElement('tr'); state.headers.forEach((_, i) => { const td = document.createElement('td'); td.textContent = cleanText(row[i]); tr.append(td); }); table.append(tr); });
+  const table = $('#data-table'); table.replaceChildren(); const header = document.createElement('tr'); [...fields.map((field) => fieldNames[field]), '확인'].forEach((name) => { const th = document.createElement('th'); th.textContent = name; header.append(th); }); table.append(header);
+  rows.slice(0, 10).forEach((item) => { const tr = document.createElement('tr'); fields.forEach((field) => { const td = document.createElement('td'); td.textContent = field === 'postcode' ? item.postcodeNormalized ?? item.postcode : item[field]; tr.append(td); }); const issues = []; if (!item.name) issues.push('이름 누락'); if (!item.address) issues.push('주소 누락'); if (!item.postcodeNormalized) issues.push(item.postcode ? '우편번호 오류' : '우편번호 누락'); const td = document.createElement('td'); td.textContent = issues.join(' · ') || '정상'; if (issues.length) { tr.classList.add('data-row-warning'); td.classList.add('data-status-warning'); } tr.append(td); table.append(tr); });
   $('#data-section').classList.remove('hidden'); $('#label-section').classList.remove('hidden'); $('#preview-section').classList.remove('hidden');
   renderPreview();
 }
@@ -108,27 +113,48 @@ function populateTemplates() {
   const select = $('#manufacturer-select'); select.replaceChildren();
   manufacturers().forEach((manufacturer) => select.append(new Option(manufacturer.name, manufacturer.id, false, manufacturer.id === state.manufacturer)));
   populateProducts();
+  updateTemplateSummary();
 }
-function design() { return { showName: $('#show-name').checked, showPostcode: $('#show-postcode').checked, showAddress: $('#show-address').checked, showDetail: $('#show-detail').checked, showGuides: $('#show-guides').checked, fontSize: Number($('#font-size').value), bold: $('#font-weight').value === 'bold', align: $('#text-align').value, lineHeight: Number($('#line-height').value), offsetX: Number($('#offset-x').value), offsetY: Number($('#offset-y').value) }; }
+function updateTemplateSummary() {
+  const t = state.template;
+  const paperName = t.paper.width === 210 && t.paper.height === 297 ? 'A4' : `${t.paper.width} × ${t.paper.height}mm`;
+  $('#selected-template-summary').textContent = `${state.custom ? '사용자 지정' : t.name} · ${t.labelWidth} × ${t.labelHeight}mm · ${t.cols}열 × ${t.rows}행 (${t.cols * t.rows}칸/${paperName})`;
+  $('#paper-guidance').textContent = t.paper.width === 210 && t.paper.height === 297 ? '용지 A4' : `용지 ${t.paper.width} × ${t.paper.height}mm`;
+  $('#custom-toggle').textContent = state.custom ? '사용자 지정 규격 닫기' : '사용자 지정 규격';
+  $('#custom-toggle').setAttribute('aria-expanded', String(state.custom));
+}
+function design() { return { arrangement: $('#arrangement-select').value, showName: $('#show-name').checked, nameSuffix: $('#name-suffix').value, showPostcode: $('#show-postcode').checked, showAddress: $('#show-address').checked, showDetail: $('#show-detail').checked, showGuides: $('#show-guides').checked, fontSize: Number($('#font-size').value), bold: $('#font-weight').value === 'bold', align: $('#text-align').value, lineHeight: Number($('#line-height').value), offsetX: Number($('#offset-x').value), offsetY: Number($('#offset-y').value) }; }
 
 const customDefs = [['paperWidth', '용지 가로', 210], ['paperHeight', '용지 세로', 297], ['labelWidth', '라벨 가로', 99], ['labelHeight', '라벨 세로', 34], ['cols', '열', 2], ['rows', '행', 8], ['startX', '첫 라벨 시작 X', 5], ['startY', '첫 라벨 시작 Y', 14], ['gapX', '가로 간격', 2.5], ['gapY', '세로 간격', 0]];
 function renderCustomFields() { const holder = $('#custom-fields'); holder.replaceChildren(); const template = state.template; customDefs.forEach(([key, name, fallback]) => { const label = document.createElement('label'); label.textContent = `${name}${key === 'cols' || key === 'rows' ? '' : ' (mm)'}`; const input = document.createElement('input'); input.type = 'number'; input.step = key === 'cols' || key === 'rows' ? '1' : '0.1'; input.min = '0'; input.dataset.custom = key; input.value = template[key] ?? template.paper?.[key === 'paperWidth' ? 'width' : 'height'] ?? fallback; label.append(input); holder.append(label); }); }
 function refreshTemplateFromCustom() { const values = {}; document.querySelectorAll('[data-custom]').forEach((input) => { values[input.dataset.custom] = input.value; }); state.template = createCustomTemplate(values); return validateTemplate(state.template); }
 function currentTemplateError() { return state.custom ? refreshTemplateFromCustom() : ''; }
 
-function labelLines(row) {
-  const d = design(); const lines = [];
-  // This is deliberately fixed so source-column variations never change the
-  // printed arrangement: name → address (including detail) → postcode.
-  if (d.showName && row.name) lines.push(row.name);
-  const addressParts = [];
-  if (d.showAddress && row.address) addressParts.push(row.address);
-  if (d.showDetail && row.detail) addressParts.push(row.detail);
-  if (addressParts.length) lines.push(addressParts.join(' '));
-  if (d.showPostcode && row.postcodeNormalized) lines.push(row.postcodeNormalized);
-  return lines;
+const previewCanvas = document.createElement('canvas');
+const previewContext = previewCanvas.getContext('2d');
+function previewFont(bold) {
+  return { widthOfTextAtSize(text, size) {
+    previewContext.font = `${bold ? '700' : '400'} ${size * 96 / 72}px "Noto Sans KR"`;
+    return previewContext.measureText(text).width * 72 / 96;
+  } };
 }
-function pageCount() { const capacity = state.template.cols * state.template.rows; return Math.max(1, Math.ceil(eligibleRows().length / capacity)); }
+function startSlotPosition() { return { row: Math.floor(state.startSlot / state.template.cols) + 1, col: state.startSlot % state.template.cols + 1 }; }
+function normalizeStartSlot() { const capacity = state.template.cols * state.template.rows; state.startSlot = Math.max(0, Math.min(state.startSlot, capacity - 1)); }
+function renderStartSlotPicker() {
+  normalizeStartSlot();
+  const holder = $('#start-slot-picker'); holder.replaceChildren();
+  holder.style.setProperty('--slot-columns', String(state.template.cols));
+  const capacity = state.template.cols * state.template.rows;
+  for (let slot = 0; slot < capacity; slot += 1) {
+    const button = document.createElement('button'); button.type = 'button'; button.className = `start-slot${slot === state.startSlot ? ' selected' : ''}`;
+    button.dataset.startSlot = String(slot); button.textContent = String(slot + 1);
+    button.setAttribute('aria-label', `${Math.floor(slot / state.template.cols) + 1}행 ${slot % state.template.cols + 1}열부터 출력`);
+    button.setAttribute('aria-pressed', String(slot === state.startSlot)); holder.append(button);
+  }
+  const { row, col } = startSlotPosition();
+  $('#start-slot-summary').textContent = state.startSlot ? `첫 페이지 ${row}행 ${col}열부터 출력` : '첫 페이지 첫 칸부터 출력';
+}
+function pageCount() { const capacity = state.template.cols * state.template.rows; return labelPageSlots(eligibleRows(), capacity, state.startSlot).length; }
 function renderPreviewEditor() {
   const panel = $('#preview-edit'); const sourceRow = state.selectedEditSourceRow;
   const row = eligibleRows().find((item) => item.sourceRow === sourceRow);
@@ -139,23 +165,33 @@ function renderPreviewEditor() {
 }
 function selectPreviewEdit(sourceRow) { state.selectedEditSourceRow = sourceRow; renderPreviewEditor(); $('#preview-edit').scrollIntoView({ behavior: 'smooth', block: 'nearest' }); }
 function renderPreview() {
-  const error = currentTemplateError(); $('#template-error').textContent = error; $('#template-error').classList.toggle('hidden', !error); if (error) return;
-  const paper = $('#paper-preview'); paper.replaceChildren(); const template = state.template; const rows = eligibleRows(); const capacity = template.cols * template.rows; const count = pageCount(); state.previewPage = Math.min(state.previewPage, count - 1); const start = state.previewPage * capacity; const d = design();
-  paper.style.aspectRatio = `${template.paper.width}/${template.paper.height}`;
+  const error = currentTemplateError(); updateTemplateSummary(); $('#template-error').textContent = error; $('#template-error').classList.toggle('hidden', !error); if (error) return;
+  const paper = $('#paper-preview'); paper.replaceChildren(); const template = state.template; const rows = eligibleRows(); const capacity = template.cols * template.rows; renderStartSlotPicker(); const pages = labelPageSlots(rows, capacity, state.startSlot); const count = pages.length; state.previewPage = Math.min(state.previewPage, count - 1); const d = design();
+  paper.style.width = `${template.paper.width}mm`; paper.style.height = `${template.paper.height}mm`;
   const stats = { shrunk: 0, overflow: 0 };
-  rows.slice(start, start + capacity).forEach((row, index) => {
-    const col = index % template.cols; const r = Math.floor(index / template.cols); const label = document.createElement('article'); label.className = 'label'; const left = template.startX + col * (template.labelWidth + template.gapX) + d.offsetX; const top = template.startY + r * (template.labelHeight + template.gapY) + d.offsetY; let size = Math.max(8, d.fontSize);
-    Object.assign(label.style, { left: `${left / template.paper.width * 100}%`, top: `${top / template.paper.height * 100}%`, width: `${template.labelWidth / template.paper.width * 100}%`, height: `${template.labelHeight / template.paper.height * 100}%`, fontSize: `${size}pt`, fontWeight: d.bold ? '700' : '400', textAlign: d.align, lineHeight: d.lineHeight });
-    labelLines(row).forEach((line) => { const p = document.createElement('div'); p.textContent = line; label.append(p); });
+  const pageRows = pages[state.previewPage];
+  const previewFonts = { regular: previewFont(false), bold: previewFont(true) };
+  for (let index = 0; index < capacity; index += 1) {
+    const row = pageRows[index];
+    const col = index % template.cols; const r = Math.floor(index / template.cols); const label = document.createElement('article'); label.className = 'label'; const box = labelGeometry(template, r, col, d.offsetX, d.offsetY);
+    Object.assign(label.style, { left: `${box.x}mm`, top: `${box.y}mm`, width: `${box.width}mm`, height: `${box.height}mm`, fontWeight: d.bold ? '700' : '400', textAlign: d.align });
+    if (!row) { label.classList.add('label-empty'); label.setAttribute('aria-hidden', 'true'); paper.append(label); continue; }
+    const layout = layoutArrangement(labelContent(row, d), previewFonts, d, box);
+    label.classList.add('layout-variant');
+    layout.items.forEach((item) => { const p = document.createElement('div'); p.textContent = item.text; Object.assign(p.style, { left: `${item.x}pt`, top: `${item.top}pt`, fontSize: `${item.size}pt`, fontWeight: item.weight === 'bold' ? '700' : '400' }); label.append(p); });
+    if (layout.divider) { const line = document.createElement('div'); line.className = 'layout-divider'; Object.assign(line.style, { left: `${layout.divider.x1}pt`, top: `${layout.divider.top}pt`, width: `${layout.divider.x2 - layout.divider.x1}pt` }); label.append(line); }
     const editButton = document.createElement('button'); editButton.type = 'button'; editButton.className = 'label-edit'; editButton.textContent = '수정'; editButton.dataset.sourceRow = row.sourceRow; editButton.setAttribute('aria-label', `데이터 ${row.sourceRow}행 라벨 수정`); label.append(editButton); paper.append(label);
-    while (label.scrollHeight > label.clientHeight && size > 8) { size -= 0.5; label.style.fontSize = `${size}pt`; }
-    if (size < d.fontSize) stats.shrunk += 1;
-    if (label.scrollHeight > label.clientHeight) { stats.overflow += 1; label.classList.add('overflowing'); }
-  });
+    if (layout.size < d.fontSize) stats.shrunk += 1;
+    if (!layout.fits || label.scrollHeight > label.clientHeight) { stats.overflow += 1; label.classList.add('overflowing'); }
+  }
   state.previewStats = stats;
   $('#page-indicator').textContent = `${state.previewPage + 1} / ${count} 페이지`; $('#previous-page').disabled = state.previewPage === 0; $('#next-page').disabled = state.previewPage >= count - 1;
   const alerts = []; if (stats.shrunk) alerts.push(`${stats.shrunk}개 라벨 글자 축소`); if (stats.overflow) alerts.push(`${stats.overflow}개 라벨은 8pt에서도 넘침`);
-  $('#preview-summary').textContent = `${rows.length}개 유효 행 · 페이지당 ${capacity}개 라벨${alerts.length ? ` · ${alerts.join(', ')}` : ''}`;
+  const firstBox = labelGeometry(template, 0, 0, d.offsetX, d.offsetY);
+  const lastBox = labelGeometry(template, template.rows - 1, template.cols - 1, d.offsetX, d.offsetY);
+  const bottomMargin = template.paper.height - lastBox.y - lastBox.height;
+  const startNote = state.previewPage === 0 && state.startSlot ? ` · ${startSlotPosition().row}행 ${startSlotPosition().col}열부터 출력` : '';
+  $('#preview-summary').textContent = `${rows.length}개 유효 행 · 페이지당 ${capacity}개 라벨${startNote} · 위 여백 ${firstBox.y.toFixed(2)}mm / 아래 여백 ${bottomMargin.toFixed(2)}mm${alerts.length ? ` · ${alerts.join(', ')}` : ''}`;
   renderPreviewEditor();
 }
 
@@ -166,51 +202,50 @@ function parseDelimited(text, delimiter) {
 }
 function guessDelimiter(text) { return [',', '\t', ';'].map((delimiter) => ({ delimiter, score: text.split(/\r?\n/).slice(0, 10).reduce((sum, line) => sum + line.split(delimiter).length - 1, 0) })).sort((a, b) => b.score - a.score)[0].delimiter; }
 async function parseFile(file) {
-  const buffer = await file.arrayBuffer(); if (file.name.toLowerCase().endsWith('.csv')) { const utf8 = new TextDecoder('utf-8', { fatal: false }).decode(buffer); const korean = new TextDecoder('euc-kr', { fatal: false }).decode(buffer); const text = /�/.test(utf8) && !/�/.test(korean) ? korean : utf8; loadRows(parseDelimited(text, guessDelimiter(text))); return; }
+  const buffer = await file.arrayBuffer(); if (file.name.toLowerCase().endsWith('.csv')) { const utf8 = new TextDecoder('utf-8', { fatal: false }).decode(buffer); const korean = new TextDecoder('euc-kr', { fatal: false }).decode(buffer); const text = /�/.test(utf8) && !/�/.test(korean) ? korean : utf8; loadImportedRows(parseDelimited(text, guessDelimiter(text))); return; }
   const book = XLSX.read(buffer, { type: 'array', cellFormula: false, cellHTML: false }); state.workbook = book; const names = book.SheetNames; const picker = $('#sheet-picker'); const select = $('#sheet-select'); select.replaceChildren(...names.map((name) => new Option(name, name))); picker.classList.toggle('hidden', names.length < 2); loadSheet(names[0]);
 }
-function loadSheet(name) { const sheet = state.workbook.Sheets[name]; loadRows(XLSX.utils.sheet_to_json(sheet, { header: 1, defval: '', raw: false })); }
-function loadRows(rows, mapping = null) { state.rawRows = rows.filter((row) => row.some((cell) => cleanText(cell))); state.previewEdits.clear(); state.selectedEditSourceRow = null; if (!state.rawRows.length) { toast('읽을 수 있는 데이터가 없습니다.', true); return; } detectMapping(); if (mapping) { state.hasHeader = false; state.headers = ['이름', '우편번호', '주소', '상세주소']; state.mapping = mapping; } renderData(); }
+function loadSheet(name) { const sheet = state.workbook.Sheets[name]; loadImportedRows(XLSX.utils.sheet_to_json(sheet, { header: 1, defval: '', raw: false })); }
+function loadImportedRows(rows) { const result = structurePastedRows(rows, { hasHeader: detectHeader(rows[0] ?? []) }); loadRows(result.rows, result.mapping, result.hasHeader); }
+function loadRows(rows, mapping = null, hasHeader = false) { state.rawRows = rows.filter((row) => row.some((cell) => cleanText(cell))); state.mappingEdited = false; state.autoStructured = Boolean(mapping); state.previewEdits.clear(); state.selectedEditSourceRow = null; if (!state.rawRows.length) { toast('읽을 수 있는 데이터가 없습니다.', true); return; } detectMapping(); if (mapping) { state.hasHeader = hasHeader; state.headers = hasHeader ? Array.from({ length: 4 }, (_, i) => cleanText(state.rawRows[0][i]) || `열 ${i + 1}`) : ['이름', '우편번호', '주소', '상세주소']; state.mapping = mapping; state.mappingConfidence = Object.fromEntries(fields.map((field) => [field, mapping[field] === '' ? field === 'detail' ? 'optional' : 'missing' : 'high'])); } renderData(); }
 function loadPastedData(text, automatic = false) {
   if (!text.trim()) return toast('붙여넣을 데이터를 입력해주세요.', true);
-  const result = structurePastedRows(parseDelimited(text, guessDelimiter(text)));
-  loadRows(result.rows, result.mapping);
+  const rows = parseDelimited(text, guessDelimiter(text));
+  const result = structurePastedRows(rows, { hasHeader: detectHeader(rows[0] ?? []) });
+  loadRows(result.rows, result.mapping, result.hasHeader);
   if (automatic) toast('엑셀에서 붙여넣은 데이터를 불러왔습니다. 열을 확인해주세요.');
 }
 
 async function createPdf() {
   const error = currentTemplateError(); if (error) { toast(error, true); return; } const rows = eligibleRows(); if (!rows.length) { toast('주소가 있는 행이 없어 PDF를 만들 수 없습니다.', true); return; }
-  if (state.previewStats.overflow) { toast(`8pt에서도 영역을 넘는 라벨이 ${state.previewStats.overflow}개 있습니다. 내용을 줄이거나 글꼴 크기를 조정해주세요.`, true); return; }
+  const warning = $('#export-warning'); warning.classList.add('hidden'); warning.textContent = '';
   const button = $('#export-pdf'); button.disabled = true; button.textContent = 'PDF 만드는 중…';
   try {
     const pdf = await PDFDocument.create(); pdf.registerFontkit(fontkit); const d = design(); const fontBytes = await fetch(d.bold ? fontBoldUrl : fontRegularUrl).then((response) => response.arrayBuffer());
     // CJK OTF subsetting can corrupt the character map in some PDF readers.
     // Embed the complete licensed font to preserve every Korean syllable.
-    const font = await pdf.embedFont(fontBytes, { subset: false }); const t = state.template; const capacity = t.cols * t.rows; let shrunk = 0;
-    for (let pageIndex = 0; pageIndex < Math.ceil(rows.length / capacity); pageIndex += 1) {
+    const font = await pdf.embedFont(fontBytes, { subset: false }); const t = state.template; const capacity = t.cols * t.rows;
+    const layouts = inspectLabelPages(rows, t, d, { regular: font, bold: font }, labelGeometry, (row) => labelContent(row, d), layoutArrangement, state.startSlot);
+    const overflowing = layouts.filter((layout) => !layout.fits);
+    if (overflowing.length) {
+      const examples = overflowing.slice(0, 10).map((item) => `데이터 ${item.row.sourceRow}행 (${item.page}페이지 ${item.slot}번)`).join(', ');
+      warning.textContent = `${overflowing.length}개 라벨의 내용이 칸을 넘어서 PDF를 만들지 않았습니다: ${examples}${overflowing.length > 10 ? ` 외 ${overflowing.length - 10}건` : ''}. 데이터를 줄이거나 글꼴 크기를 조정해주세요.`;
+      warning.classList.remove('hidden'); warning.scrollIntoView({ block: 'nearest' }); return;
+    }
+    const shrunk = layouts.filter((layout) => layout.size < d.fontSize).length;
+    const pages = labelPageSlots(rows, capacity, state.startSlot);
+    for (let pageIndex = 0; pageIndex < pages.length; pageIndex += 1) {
       const page = pdf.addPage([t.paper.width * mm, t.paper.height * mm]);
-      rows.slice(pageIndex * capacity, (pageIndex + 1) * capacity).forEach((row, index) => {
-        const col = index % t.cols; const r = Math.floor(index / t.cols);
-        const x = (t.startX + col * (t.labelWidth + t.gapX) + d.offsetX) * mm;
-        const top = (t.startY + r * (t.labelHeight + t.gapY) + d.offsetY) * mm;
-        const width = t.labelWidth * mm; const height = t.labelHeight * mm;
-        const padding = 2.5 * mm;
-        const safeTextWidth = (width - padding * 2) * PDF_TEXT_WIDTH_FACTOR;
-        const source = labelLines(row);
-        let size = d.fontSize; let lines = [];
-        while (size >= 8) {
-          lines = source.flatMap((line) => wrapPdfText(line, font, size, safeTextWidth));
-          if (lines.length * size * d.lineHeight <= height - padding * 2) break;
-          size -= 0.5;
-        }
-        if (size < d.fontSize) shrunk += 1;
-        size = Math.max(size, 8);
+      layouts.filter((layout) => layout.page === pageIndex + 1).forEach((layout) => {
+        const { box, items, divider } = layout;
+        const x = box.x * mm; const top = box.y * mm;
+        const width = box.width * mm; const height = box.height * mm;
         if (d.showGuides) page.drawRectangle({ x, y: t.paper.height * mm - top - height, width, height, borderColor: rgb(0.45, 0.55, 0.7), borderWidth: 0.35, borderDashArray: [1.5, 1.2], borderOpacity: 0.8 });
-        const lineStep = size * d.lineHeight;
-        lines.slice(0, Math.floor((height - padding * 2) / lineStep)).forEach((line, lineIndex) => {
-          const textWidth = font.widthOfTextAtSize(line, size);
-          const textX = d.align === 'center' ? x + (width - textWidth) / 2 : d.align === 'right' ? x + width - padding - textWidth : x + padding;
-          page.drawText(line, { x: textX, y: t.paper.height * mm - top - padding - size - lineIndex * lineStep, size, font, color: rgb(0.08, 0.1, 0.14) });
+        if (divider) page.drawLine({ start: { x: x + divider.x1, y: t.paper.height * mm - top - divider.top }, end: { x: x + divider.x2, y: t.paper.height * mm - top - divider.top }, thickness: 0.45, color: rgb(0.55, 0.61, 0.7) });
+        items.forEach((item) => {
+          const options = { x: x + item.x, y: t.paper.height * mm - top - item.top - item.size, size: item.size, font, color: rgb(0.08, 0.1, 0.14) };
+          page.drawText(item.text, options);
+          if (item.weight === 'bold' && !d.bold) page.drawText(item.text, { ...options, x: options.x + 0.18 });
         });
       });
     }
@@ -241,12 +276,13 @@ $('#paste-input').addEventListener('paste', (event) => {
   loadPastedData(text, true);
 });
 $('#sheet-select').addEventListener('change', (event) => loadSheet(event.target.value));
-$('#has-header').addEventListener('change', (event) => { state.hasHeader = event.target.checked; const first = state.rawRows[0] ?? []; state.headers = state.hasHeader ? first.map((value, i) => cleanText(value) || `열 ${i + 1}`) : first.map((_, i) => `열 ${i + 1}`); if (state.hasHeader) state.headers.forEach((header, index) => { const field = fieldForHeader(header); if (field) state.mapping[field] = String(index); }); renderData(); });
-$('#mapping').addEventListener('change', (event) => { if (!event.target.dataset.field) return; state.mapping[event.target.dataset.field] = event.target.value; renderData(); });
+$('#has-header').addEventListener('change', (event) => { state.hasHeader = event.target.checked; state.mappingEdited = true; const first = state.rawRows[0] ?? []; const columns = Math.max(...state.rawRows.map((row) => row.length), 0); state.headers = Array.from({ length: columns }, (_, i) => state.hasHeader ? cleanText(first[i]) || `열 ${i + 1}` : `열 ${i + 1}`); const initial = {}; if (state.hasHeader) state.headers.forEach((header, index) => { const field = fieldForHeader(header); if (field) initial[field] = String(index); }); const result = inferColumnMappingWithConfidence(state.rawRows.slice(state.hasHeader ? 1 : 0), columns, initial); state.mapping = result.mapping; state.mappingConfidence = result.confidence; renderData(); });
+$('#mapping').addEventListener('change', (event) => { if (!event.target.dataset.field) return; state.mappingEdited = true; const field = event.target.dataset.field; state.mapping[field] = event.target.value; state.mappingConfidence[field] = event.target.value === '' ? field === 'detail' ? 'optional' : 'missing' : 'manual'; renderData(); });
 $('#manufacturer-select').addEventListener('change', (event) => { state.manufacturer = event.target.value; state.product = productsFor(state.manufacturer)[0]?.id; state.custom = false; state.template = presetTemplate(state.manufacturer, state.product); populateProducts(); $('#custom-fields').classList.add('hidden'); renderPreview(); });
 $('#product-select').addEventListener('change', (event) => { state.product = event.target.value; state.custom = false; state.template = presetTemplate(state.manufacturer, state.product); $('#custom-fields').classList.add('hidden'); renderPreview(); });
 $('#custom-toggle').addEventListener('click', () => { state.custom = !state.custom; if (state.custom) { state.template = createCustomTemplate(state.template); renderCustomFields(); } else state.template = presetTemplate(state.manufacturer, state.product); $('#custom-fields').classList.toggle('hidden', !state.custom); renderPreview(); });
 $('#custom-fields').addEventListener('input', renderPreview); document.querySelectorAll('#label-section input, #label-section select').forEach((node) => node.addEventListener('input', () => { $('#font-size-output').textContent = `${$('#font-size').value}pt`; renderPreview(); }));
+$('#start-slot-picker').addEventListener('click', (event) => { const button = event.target.closest('[data-start-slot]'); if (!button) return; state.startSlot = Number(button.dataset.startSlot); state.previewPage = 0; renderPreview(); });
 $('#paper-preview').addEventListener('click', (event) => { const button = event.target.closest('.label-edit'); if (button) selectPreviewEdit(Number(button.dataset.sourceRow)); });
 $('#save-preview-edit').addEventListener('click', () => {
   const sourceRow = state.selectedEditSourceRow; if (!sourceRow) return;
@@ -257,3 +293,4 @@ $('#reset-preview-edit').addEventListener('click', () => { const sourceRow = sta
 $('#cancel-preview-edit').addEventListener('click', () => { state.selectedEditSourceRow = null; renderPreviewEditor(); });
 $('#previous-page').addEventListener('click', () => { state.previewPage -= 1; renderPreview(); }); $('#next-page').addEventListener('click', () => { state.previewPage += 1; renderPreview(); }); $('#export-pdf').addEventListener('click', createPdf); $('#print-preview').addEventListener('click', printPreview);
 populateTemplates();
+document.fonts.ready.then(() => { if (state.rawRows.length) renderPreview(); });

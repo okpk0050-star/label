@@ -8,13 +8,13 @@
   </head>
   <body>
     <main class="shell">
-      <header class="hero"><p class="eyebrow">브라우저에서만 처리</p><h1>우편 라벨 만들기</h1><p>엑셀·CSV를 올리거나 데이터를 붙여넣고, 라벨지에 맞는 PDF를 만드세요.</p><p class="privacy">입력한 데이터는 서버에 저장하거나 전송하지 않고 이 브라우저에서만 처리됩니다.</p></header>
+      <header class="hero"><p class="eyebrow">우편 라벨 만들기</p><h1>엑셀 주소를 그대로 붙여넣으세요.</h1><p class="hero-lead">자동으로 정리해서 라벨 PDF를 만들어드립니다.</p><p class="hero-benefits">회원가입 없음 · 설치 없음 · 서버 전송 없음</p><p class="privacy">주소 데이터는 이 브라우저 안에서만 처리하며 서버에 전송하거나 저장하지 않습니다.</p></header>
 
       <section class="card" aria-labelledby="input-title">
-        <div class="section-heading"><span>1</span><div><h2 id="input-title">데이터 입력</h2><p>Excel 파일을 선택하거나 탭·쉼표로 구분된 데이터를 붙여넣으세요.</p></div></div>
+        <div class="section-heading"><span>1</span><div><h2 id="input-title">데이터 입력</h2><p>엑셀에서 이름·우편번호·주소를 복사해 아래에 붙여넣으세요. 파일 선택도 가능합니다.</p></div></div>
         <div class="input-grid">
-          <label class="file-drop"><input id="file-input" type="file" accept=".xlsx,.xls,.csv" /><strong>엑셀 또는 CSV 파일 선택</strong><small>.xlsx · .xls · .csv / 파일은 업로드되지 않습니다</small></label>
-          <label class="paste-label" for="paste-input">엑셀 데이터 붙여넣기<textarea id="paste-input" rows="7" placeholder="엑셀에서 이름·우편번호·주소 열을 복사한 뒤 여기에 붙여넣으세요. 탭으로 구분된 셀을 자동으로 인식합니다."></textarea><small>붙여넣으면 자동으로 불러옵니다. 직접 입력하거나 수정한 뒤에는 아래 버튼을 누르세요.</small></label>
+          <label class="paste-label" for="paste-input">엑셀 데이터 통으로 붙여넣기<textarea id="paste-input" rows="7" placeholder="홍길동 02700 서울특별시 성북구 종암로 10&#10;서울특별시 노원구 동일로 1234 501동 1202호 한지민&#10;정하늘 서울특별시 광진구 능동로 120 05029"></textarea><small>엑셀에서 복사한 데이터를 통째로 붙여넣으세요. 붙여넣으면 자동으로 불러옵니다.</small></label>
+          <label class="file-drop"><input id="file-input" type="file" accept=".xlsx,.xls,.csv" /><strong>엑셀 또는 CSV 파일 선택</strong><small>.xlsx · .xls · .csv</small></label>
         </div>
         <div id="sheet-picker" class="sheet-picker hidden"><label for="sheet-select">시트 선택</label><select id="sheet-select"></select></div>
         <div class="button-row"><button id="parse-paste" class="secondary">입력한 데이터 불러오기</button></div>
@@ -22,27 +22,37 @@
 
       <section id="data-section" class="card hidden" aria-labelledby="data-title">
         <div class="section-heading"><span>2</span><div><h2 id="data-title">데이터 확인</h2><p id="data-summary"></p></div></div>
-        <label class="checkbox"><input id="has-header" type="checkbox" /> 첫 번째 행을 제목으로 사용</label>
+        <p id="data-health" class="data-health" role="status"></p>
+        <div id="mapping-alert" class="notice hidden" role="alert"></div>
         <div id="mapping" class="mapping"></div>
+        <div class="mapping-options"><details class="mapping-help"><summary>열이 잘못 인식됐나요? <span aria-hidden="true">?</span></summary><p>이름, 우편번호, 주소, 상세주소 열을 자동으로 인식합니다. 잘못 인식된 경우 각 항목을 눌러 직접 변경할 수 있습니다.</p></details><label class="checkbox"><input id="has-header" type="checkbox" /> 첫 번째 행을 제목으로 사용</label></div>
         <div id="warnings" class="notice hidden"></div>
         <div class="table-wrap"><table id="data-table"></table></div>
       </section>
 
       <section id="label-section" class="card hidden" aria-labelledby="label-title">
-        <div class="section-heading"><span>3</span><div><h2 id="label-title">라벨 규격과 표시 설정</h2><p>폼텍 공식 Word 템플릿 좌표값을 기준으로 배치합니다.</p></div></div>
-        <div class="settings-grid">
+        <div class="section-heading"><span>3</span><div><h2 id="label-title">라벨 규격과 표시 설정</h2><p>사용할 라벨지의 제조사와 제품번호를 선택하세요.</p></div></div>
+        <div class="preset-controls">
           <label>제조사<select id="manufacturer-select"></select></label>
           <label>제품번호<select id="product-select"></select></label>
-          <button id="custom-toggle" class="secondary align-end">사용자 지정 규격</button>
+        </div>
+        <p id="selected-template-summary" class="selected-template-summary"></p>
+        <section class="start-slot-control" aria-labelledby="start-slot-title"><div><strong id="start-slot-title">첫 출력 위치</strong><p id="start-slot-summary"></p></div><div id="start-slot-picker" class="start-slot-picker" role="group" aria-label="첫 출력 위치 선택"></div></section>
+        <div class="layout-controls"><label class="arrangement-control">라벨 배치<select id="arrangement-select"><option value="basic">① 기본형 — 이름 · 주소 · 우편번호</option><option value="divider">② 이름 강조 + 구분선</option><option value="postcode-right">③ 우편번호 우측 배치</option><option value="compact">④ 컴팩트형 (작은 라벨용)</option></select></label><label>줄 간격<select id="line-height"><option value="0">0 · 간격 없음</option><option value="1">1.0 · 좁게</option><option value="1.2" selected>1.2</option><option value="1.4">1.4 · 여유있게</option><option value="1.6">1.6 · 넉넉하게</option></select></label></div>
+        <p class="spacing-help">라벨이 작거나 내용이 길면 줄 간격을 줄여보세요. 실제 인쇄 결과는 라벨지와 글꼴에 따라 달라질 수 있습니다.</p>
+        <details class="advanced-settings"><summary>고급 설정</summary>
+          <p class="advanced-help">필요할 때만 표시 방식이나 인쇄 위치를 바꾸세요.</p>
+          <div class="settings-grid">
           <fieldset class="design"><legend>표시 항목</legend><label><input id="show-name" type="checkbox" checked /> 이름</label><label><input id="show-postcode" type="checkbox" checked /> 우편번호</label><label><input id="show-address" type="checkbox" checked /> 주소</label><label><input id="show-detail" type="checkbox" checked /> 상세주소</label><label><input id="show-guides" type="checkbox" checked /> PDF 라벨 점선</label></fieldset>
+          <label>이름 뒤 호칭<select id="name-suffix"><option value="">없음</option><option value="귀하">귀하</option><option value="귀중">귀중</option></select></label>
           <label>글꼴 크기 <output id="font-size-output">11pt</output><input id="font-size" type="range" min="8" max="16" value="11" /></label>
           <label>글꼴 굵기<select id="font-weight"><option value="normal">보통</option><option value="bold">굵게</option></select></label>
           <label>정렬<select id="text-align"><option value="left">왼쪽</option><option value="center">가운데</option><option value="right">오른쪽</option></select></label>
-          <label>줄 간격<select id="line-height"><option value="1.2">좁게</option><option value="1.4" selected>보통</option><option value="1.6">넓게</option></select></label>
-          <label>가로 보정(mm)<input id="offset-x" type="number" min="-5" max="5" step="0.1" value="0" /></label>
-          <label>세로 보정(mm)<input id="offset-y" type="number" min="-5" max="5" step="0.1" value="0" /></label>
-        </div>
-        <div id="custom-fields" class="custom-grid hidden"></div>
+          </div>
+          <div class="print-offsets"><strong>인쇄 위치 미세조정</strong><p>인쇄 결과가 전체적으로 한쪽으로 밀리는 경우에만 조정하세요.</p><div class="offset-grid"><label>← → 가로 위치<input id="offset-x" type="number" min="-5" max="5" step="0.1" value="0" /> mm</label><label>↑ ↓ 세로 위치<input id="offset-y" type="number" min="-5" max="5" step="0.1" value="0" /> mm</label></div></div>
+          <button id="custom-toggle" class="secondary" type="button" aria-controls="custom-fields" aria-expanded="false">사용자 지정 규격</button>
+          <div id="custom-fields" class="custom-grid hidden"></div>
+        </details>
         <p id="template-error" class="error hidden"></p>
       </section>
 
@@ -59,7 +69,9 @@
           </div>
           <div class="button-row"><button id="save-preview-edit" class="primary" type="button">수정 반영</button><button id="reset-preview-edit" class="secondary" type="button">원본으로 되돌리기</button><button id="cancel-preview-edit" class="secondary" type="button">취소</button></div>
         </section>
-        <div class="button-row export-row"><button id="print-preview" class="secondary">미리보기 인쇄</button><button id="export-pdf" class="primary">PDF 만들기</button><p>미리보기 인쇄는 현재 페이지를 바로 인쇄합니다. 인쇄할 때 <strong>배율 100% / 실제 크기</strong>를 선택하고 “페이지에 맞춤”은 해제하세요.</p></div>
+        <div id="export-warning" class="notice hidden" role="alert"></div>
+        <div class="print-checklist"><strong>인쇄 전 확인</strong><span><span id="paper-guidance">용지 A4</span> · 배율 100% / 실제 크기 · “페이지에 맞춤” 해제</span></div>
+        <div class="button-row export-row"><button id="export-pdf" class="primary">PDF 만들기</button><button id="print-preview" class="secondary">현재 페이지 인쇄</button><p>라벨지에 인쇄하기 전, 일반 A4 용지로 위치를 확인해보세요.</p></div>
         <div class="preview-wrap"><div id="paper-preview" class="paper-preview" aria-label="A4 라벨 미리보기"></div></div>
       </section>
     </main>

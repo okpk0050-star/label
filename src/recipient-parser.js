@@ -53,7 +53,11 @@ export function parseCombinedRecipient(source) {
 
   const leading = clean(withoutPostal.slice(0, addressStart));
   let addressAndDetail = clean(withoutPostal.slice(addressStart));
-  item.name = /^[가-힣]{2,4}$/.test(leading) ? leading : '';
+  // The text before the physical address is the recipient. It may be a
+  // department or legal entity, not just a short personal name.
+  const leadingLooksLikeAddress = provincePattern.test(leading)
+    || /(?:^|\s)[가-힣\d]+(?:대로|로|길)\s*\d+(?:-\d+)?(?=\s|$)/.test(leading);
+  item.name = leading && !leadingLooksLikeAddress && /[가-힣A-Za-z]/.test(leading) ? leading : '';
 
   // Treat a last short Hangul word as a person only after a concrete unit marker.
   const trailingName = addressAndDetail.match(/(?:^|\s)([가-힣]{2,4})$/);
