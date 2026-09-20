@@ -19,17 +19,13 @@ npm run build
 
 `dist/` 디렉터리를 정적 호스팅에 배포하면 됩니다.
 
-## Cloudflare Pages 배포
+## GitHub 자동 배포
 
-현재 서비스는 [postal-label-service.pages.dev](https://postal-label-service.pages.dev/)에 Direct Upload 방식으로 배포되어 있습니다. 코드 변경 후에는 Cloudflare 계정에 로그인한 환경에서 다음 명령으로 새 버전을 올립니다.
+현재 서비스는 [postal-label-service.pages.dev](https://postal-label-service.pages.dev/)에 배포되어 있습니다. GitHub와 Cloudflare 연결을 마치면 `master` 브랜치 push마다 테스트·빌드·운영 배포가 자동 실행되고, pull request마다 미리보기 배포가 생성됩니다.
 
-```bash
-npm test
-npm run build
-npm exec --yes --package wrangler -- wrangler pages deploy dist --project-name postal-label-service --branch main
-```
+처음 연결할 때 필요한 GitHub Secret/Variable, Cloudflare 권한, 그리고 다른 서비스에 재사용하는 방법은 [.github/DEPLOYMENT.md](.github/DEPLOYMENT.md)를 참고하세요. 비밀값은 소스 코드나 로컬 `.env` 파일에 커밋하지 않습니다.
 
-Direct Upload 프로젝트이므로 Git 저장소의 변경 사항은 자동 배포되지 않습니다.
+Cloudflare Pages 쪽은 Direct Upload 프로젝트 상태를 유지해도 됩니다. 배포 주체가 로컬 명령에서 GitHub Actions로 바뀌므로, 저장소 연결과 Secret 등록 후에는 수동 업로드가 필요하지 않습니다.
 
 ## 구성
 
