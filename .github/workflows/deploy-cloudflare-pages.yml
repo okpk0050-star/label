@@ -47,9 +47,20 @@ jobs:
       - name: Validate Cloudflare deployment configuration
         shell: bash
         run: |
-          test -n "$CLOUDFLARE_API_TOKEN" || { echo "::error title=Missing GitHub Secret::CLOUDFLARE_API_TOKEN Secret is required for Cloudflare Pages deployment."; exit 1; }
-          test -n "$CLOUDFLARE_ACCOUNT_ID" || { echo "::error title=Missing GitHub Secret::CLOUDFLARE_ACCOUNT_ID Secret is required for Cloudflare Pages deployment."; exit 1; }
-          test -n "$PAGES_PROJECT" || { echo "::error title=Missing Pages project::Set CLOUDFLARE_PAGES_PROJECT to the existing Cloudflare Pages project name."; exit 1; }
+          missing=0
+          if [ -z "$CLOUDFLARE_API_TOKEN" ]; then
+            echo "::error title=Missing GitHub Secret::CLOUDFLARE_API_TOKEN Secret is required for Cloudflare Pages deployment."
+            missing=1
+          fi
+          if [ -z "$CLOUDFLARE_ACCOUNT_ID" ]; then
+            echo "::error title=Missing GitHub Secret::CLOUDFLARE_ACCOUNT_ID Secret is required for Cloudflare Pages deployment."
+            missing=1
+          fi
+          if [ -z "$PAGES_PROJECT" ]; then
+            echo "::error title=Missing Pages project::Set CLOUDFLARE_PAGES_PROJECT to the existing Cloudflare Pages project name."
+            missing=1
+          fi
+          exit "$missing"
 
       - name: Deploy to Cloudflare Pages
         # Forked pull requests cannot access repository secrets; they still run tests and build.
