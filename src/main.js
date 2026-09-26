@@ -12,6 +12,7 @@ import { inferColumnMappingWithConfidence } from './column-mapping.js';
 import { mappingAlertText } from './mapping-feedback.js';
 import { inspectLabelPages, labelPageSlots } from './pdf-layout.js';
 import { labelContent, layoutArrangement } from './label-arrangements.js';
+import { FEEDBACK_ARIA_LABEL, FEEDBACK_FORM_URL } from './feedback.js';
 
 const $ = (selector) => document.querySelector(selector);
 const state = { rawRows: [], headers: [], hasHeader: false, mappingEdited: false, autoStructured: false, mapping: { name: '', postcode: '', address: '', detail: '' }, mappingConfidence: {}, manufacturer: 'formtec', product: '3105', template: presetTemplate('formtec', '3105'), custom: false, startSlot: 0, previewPage: 0, previewStats: { shrunk: 0, overflow: 0 }, previewEdits: new Map(), selectedEditSourceRow: null };
@@ -24,6 +25,16 @@ const fontRegularUrl = '/fonts/NotoSansCJKkr-Regular.otf';
 const fontBoldUrl = '/fonts/NotoSansCJKkr-Bold.otf';
 
 function toast(message, error = false) { const node = $('#toast'); node.textContent = message; node.className = error ? 'show error-toast' : 'show'; window.clearTimeout(toast.timer); toast.timer = window.setTimeout(() => { node.className = ''; }, 4200); }
+function feedbackLink(text = '문제가 있었나요? 피드백 보내기') {
+  const link = document.createElement('a'); link.className = 'feedback-inline-link'; link.href = FEEDBACK_FORM_URL; link.target = '_blank'; link.rel = 'noopener noreferrer'; link.textContent = text; link.setAttribute('aria-label', FEEDBACK_ARIA_LABEL); return link;
+}
+function setFeedbackMessage(node, message) {
+  node.replaceChildren();
+  if (!message) { node.classList.add('hidden'); return; }
+  node.append(document.createTextNode(`${message} `), feedbackLink());
+  node.classList.remove('hidden');
+}
+document.querySelectorAll('[data-feedback-link]').forEach((link) => { link.href = FEEDBACK_FORM_URL; link.setAttribute('aria-label', FEEDBACK_ARIA_LABEL); });
 function cleanText(value) { return String(value ?? '').trim().replace(/\s+/g, ' '); }
 function normalizePostcode(value) { return normalizePostalValue(value); }
 function detectHeader(row) { return row.filter(Boolean).some((cell) => Object.values(aliases).flat().includes(cleanText(cell).toLowerCase())); }
@@ -123,7 +134,7 @@ function updateTemplateSummary() {
   $('#custom-toggle').textContent = state.custom ? '사용자 지정 규격 닫기' : '사용자 지정 규격';
   $('#custom-toggle').setAttribute('aria-expanded', String(state.custom));
 }
-function design() { return { arrangement: $('#arrangement-select').value, showName: $('#show-name').checked, nameSuffix: $('#name-suffix').value, showPostcode: $('#show-postcode').checked, showAddress: $('#show-address').checked, showDetail: $('#show-detail').checked, showGuides: $('#show-guides').checked, fontSize: Number($('#font-size').value), bold: $('#font-weight').value === 'bold', align: $('#text-align').value, lineHeight: Number($('#line-height').value), offsetX: Number($('#offset-x').value), offsetY: Number($('#offset-y').value) }; }
+function design() { return { arrangement: $('#arrangement-select').value, showName: $('#show-name').checked, nameSuffix: $('#name-suffix').value, showPostcode: $('#show-postcode').checked, showAddress: $('#show-address').checked, showDetail: $('#show-detail').checked, showGuides: $('#show-guides').checked, showDebugGeometry: $('#show-debug-geometry').checked, fontSize: Number($('#font-size').value), bold: $('#font-weight').value === 'bold', align: $('#text-align').value, lineHeight: Number($('#line-height').value), offsetX: Number($('#offset-x').value), offsetY: Number($('#offset-y').value) }; }
 
 const customDefs = [['paperWidth', '용지 가로', 210], ['paperHeight', '용지 세로', 297], ['labelWidth', '라벨 가로', 99], ['labelHeight', '라벨 세로', 34], ['cols', '열', 2], ['rows', '행', 8], ['startX', '첫 라벨 시작 X', 5], ['startY', '첫 라벨 시작 Y', 14], ['gapX', '가로 간격', 2.5], ['gapY', '세로 간격', 0]];
 function renderCustomFields() { const holder = $('#custom-fields'); holder.replaceChildren(); const template = state.template; customDefs.forEach(([key, name, fallback]) => { const label = document.createElement('label'); label.textContent = `${name}${key === 'cols' || key === 'rows' ? '' : ' (mm)'}`; const input = document.createElement('input'); input.type = 'number'; input.step = key === 'cols' || key === 'rows' ? '1' : '0.1'; input.min = '0'; input.dataset.custom = key; input.value = template[key] ?? template.paper?.[key === 'paperWidth' ? 'width' : 'height'] ?? fallback; label.append(input); holder.append(label); }); }
@@ -164,16 +175,33 @@ function renderPreviewEditor() {
   fields.forEach((field) => { $(`#edit-${field}`).value = row[field] ?? ''; });
 }
 function selectPreviewEdit(sourceRow) { state.selectedEditSourceRow = sourceRow; renderPreviewEditor(); $('#preview-edit').scrollIntoView({ behavior: 'smooth', block: 'nearest' }); }
+function renderGeometryReadout(paper, template, enabled) {
+  const readout = $('#geometry-debug-readout');
+  readout.classList.toggle('hidden', !enabled);
+  if (!enabled) return;
+  window.requestAnimationFrame(() => {
+    const first = paper.querySelector('.label'); const last = paper.querySelector('.label:last-child');
+    if (!first || !last) return;
+    const paperRect = paper.getBoundingClientRect(); const firstRect = first.getBoundingClientRect(); const lastRect = last.getBoundingClientRect();
+    const pxToMm = 25.4 / 96;
+    const firstDeltaPx = firstRect.top - paperRect.top;
+    const bottomDeltaPx = paperRect.bottom - lastRect.bottom;
+    const firstByPaperRatio = firstDeltaPx * template.paper.height / paperRect.height;
+    const bottomByPaperRatio = bottomDeltaPx * template.paper.height / paperRect.height;
+    const paperStyle = getComputedStyle(paper); const labelStyle = getComputedStyle(first);
+    readout.textContent = `브라우저 실측 · A4 상단 Y ${paperRect.top.toFixed(2)}px → 첫 셀 Y ${firstRect.top.toFixed(2)}px · 차이 ${firstDeltaPx.toFixed(2)}px = ${(firstDeltaPx * pxToMm).toFixed(2)}mm (용지 비율 ${(firstByPaperRatio).toFixed(2)}mm) · 마지막 셀 아래 여백 ${(bottomDeltaPx * pxToMm).toFixed(2)}mm (용지 비율 ${bottomByPaperRatio.toFixed(2)}mm) · A4 padding ${paperStyle.paddingTop}, margin ${paperStyle.marginTop}, transform ${paperStyle.transform} · 셀 top ${labelStyle.top}, transform ${labelStyle.transform}`;
+  });
+}
 function renderPreview() {
-  const error = currentTemplateError(); updateTemplateSummary(); $('#template-error').textContent = error; $('#template-error').classList.toggle('hidden', !error); if (error) return;
+  const error = currentTemplateError(); updateTemplateSummary(); setFeedbackMessage($('#template-error'), error); if (error) return;
   const paper = $('#paper-preview'); paper.replaceChildren(); const template = state.template; const rows = eligibleRows(); const capacity = template.cols * template.rows; renderStartSlotPicker(); const pages = labelPageSlots(rows, capacity, state.startSlot); const count = pages.length; state.previewPage = Math.min(state.previewPage, count - 1); const d = design();
-  paper.style.width = `${template.paper.width}mm`; paper.style.height = `${template.paper.height}mm`;
+  paper.style.width = `${template.paper.width}mm`; paper.style.height = `${template.paper.height}mm`; paper.classList.toggle('debug-geometry', d.showDebugGeometry);
   const stats = { shrunk: 0, overflow: 0 };
   const pageRows = pages[state.previewPage];
   const previewFonts = { regular: previewFont(false), bold: previewFont(true) };
   for (let index = 0; index < capacity; index += 1) {
     const row = pageRows[index];
-    const col = index % template.cols; const r = Math.floor(index / template.cols); const label = document.createElement('article'); label.className = 'label'; const box = labelGeometry(template, r, col, d.offsetX, d.offsetY);
+    const col = index % template.cols; const r = Math.floor(index / template.cols); const label = document.createElement('article'); label.className = 'label'; label.classList.toggle('debug-geometry', d.showDebugGeometry); const box = labelGeometry(template, r, col, d.offsetX, d.offsetY);
     Object.assign(label.style, { left: `${box.x}mm`, top: `${box.y}mm`, width: `${box.width}mm`, height: `${box.height}mm`, fontWeight: d.bold ? '700' : '400', textAlign: d.align });
     if (!row) { label.classList.add('label-empty'); label.setAttribute('aria-hidden', 'true'); paper.append(label); continue; }
     const layout = layoutArrangement(labelContent(row, d), previewFonts, d, box);
@@ -192,6 +220,7 @@ function renderPreview() {
   const bottomMargin = template.paper.height - lastBox.y - lastBox.height;
   const startNote = state.previewPage === 0 && state.startSlot ? ` · ${startSlotPosition().row}행 ${startSlotPosition().col}열부터 출력` : '';
   $('#preview-summary').textContent = `${rows.length}개 유효 행 · 페이지당 ${capacity}개 라벨${startNote} · 위 여백 ${firstBox.y.toFixed(2)}mm / 아래 여백 ${bottomMargin.toFixed(2)}mm${alerts.length ? ` · ${alerts.join(', ')}` : ''}`;
+  renderGeometryReadout(paper, template, d.showDebugGeometry);
   renderPreviewEditor();
 }
 
@@ -218,7 +247,7 @@ function loadPastedData(text, automatic = false) {
 
 async function createPdf() {
   const error = currentTemplateError(); if (error) { toast(error, true); return; } const rows = eligibleRows(); if (!rows.length) { toast('주소가 있는 행이 없어 PDF를 만들 수 없습니다.', true); return; }
-  const warning = $('#export-warning'); warning.classList.add('hidden'); warning.textContent = '';
+  const warning = $('#export-warning'); setFeedbackMessage(warning, '');
   const button = $('#export-pdf'); button.disabled = true; button.textContent = 'PDF 만드는 중…';
   try {
     const pdf = await PDFDocument.create(); pdf.registerFontkit(fontkit); const d = design(); const fontBytes = await fetch(d.bold ? fontBoldUrl : fontRegularUrl).then((response) => response.arrayBuffer());
@@ -229,18 +258,25 @@ async function createPdf() {
     const overflowing = layouts.filter((layout) => !layout.fits);
     if (overflowing.length) {
       const examples = overflowing.slice(0, 10).map((item) => `데이터 ${item.row.sourceRow}행 (${item.page}페이지 ${item.slot}번)`).join(', ');
-      warning.textContent = `${overflowing.length}개 라벨의 내용이 칸을 넘어서 PDF를 만들지 않았습니다: ${examples}${overflowing.length > 10 ? ` 외 ${overflowing.length - 10}건` : ''}. 데이터를 줄이거나 글꼴 크기를 조정해주세요.`;
-      warning.classList.remove('hidden'); warning.scrollIntoView({ block: 'nearest' }); return;
+      setFeedbackMessage(warning, `${overflowing.length}개 라벨의 내용이 칸을 넘어서 PDF를 만들지 않았습니다: ${examples}${overflowing.length > 10 ? ` 외 ${overflowing.length - 10}건` : ''}. 데이터를 줄이거나 글꼴 크기를 조정해주세요.`);
+      warning.scrollIntoView({ block: 'nearest' }); return;
     }
     const shrunk = layouts.filter((layout) => layout.size < d.fontSize).length;
     const pages = labelPageSlots(rows, capacity, state.startSlot);
     for (let pageIndex = 0; pageIndex < pages.length; pageIndex += 1) {
       const page = pdf.addPage([t.paper.width * mm, t.paper.height * mm]);
+      if (d.showDebugGeometry) {
+        page.drawRectangle({ x: 0, y: 0, width: t.paper.width * mm, height: t.paper.height * mm, borderColor: rgb(0, 0, 0), borderWidth: 0.7 });
+        for (let slot = 0; slot < capacity; slot += 1) {
+          const box = labelGeometry(t, Math.floor(slot / t.cols), slot % t.cols, d.offsetX, d.offsetY);
+          page.drawRectangle({ x: box.x * mm, y: t.paper.height * mm - (box.y + box.height) * mm, width: box.width * mm, height: box.height * mm, borderColor: rgb(0.85, 0.15, 0.15), borderWidth: 0.55 });
+        }
+      }
       layouts.filter((layout) => layout.page === pageIndex + 1).forEach((layout) => {
         const { box, items, divider } = layout;
         const x = box.x * mm; const top = box.y * mm;
         const width = box.width * mm; const height = box.height * mm;
-        if (d.showGuides) page.drawRectangle({ x, y: t.paper.height * mm - top - height, width, height, borderColor: rgb(0.45, 0.55, 0.7), borderWidth: 0.35, borderDashArray: [1.5, 1.2], borderOpacity: 0.8 });
+        if (!d.showDebugGeometry && d.showGuides) page.drawRectangle({ x, y: t.paper.height * mm - top - height, width, height, borderColor: rgb(0.45, 0.55, 0.7), borderWidth: 0.35, borderDashArray: [1.5, 1.2], borderOpacity: 0.8 });
         if (divider) page.drawLine({ start: { x: x + divider.x1, y: t.paper.height * mm - top - divider.top }, end: { x: x + divider.x2, y: t.paper.height * mm - top - divider.top }, thickness: 0.45, color: rgb(0.55, 0.61, 0.7) });
         items.forEach((item) => {
           const options = { x: x + item.x, y: t.paper.height * mm - top - item.top - item.size, size: item.size, font, color: rgb(0.08, 0.1, 0.14) };

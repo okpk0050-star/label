@@ -43,7 +43,7 @@
         <details class="advanced-settings"><summary>고급 설정</summary>
           <p class="advanced-help">필요할 때만 표시 방식이나 인쇄 위치를 바꾸세요.</p>
           <div class="settings-grid">
-          <fieldset class="design"><legend>표시 항목</legend><label><input id="show-name" type="checkbox" checked /> 이름</label><label><input id="show-postcode" type="checkbox" checked /> 우편번호</label><label><input id="show-address" type="checkbox" checked /> 주소</label><label><input id="show-detail" type="checkbox" checked /> 상세주소</label><label><input id="show-guides" type="checkbox" checked /> PDF 라벨 점선</label></fieldset>
+          <fieldset class="design"><legend>표시 항목</legend><label><input id="show-name" type="checkbox" checked /> 이름</label><label><input id="show-postcode" type="checkbox" checked /> 우편번호</label><label><input id="show-address" type="checkbox" checked /> 주소</label><label><input id="show-detail" type="checkbox" checked /> 상세주소</label><label><input id="show-guides" type="checkbox" checked /> PDF 라벨 점선</label><label><input id="show-debug-geometry" type="checkbox" /> 배치 경계 표시</label></fieldset>
           <label>이름 뒤 호칭<select id="name-suffix"><option value="">없음</option><option value="귀하">귀하</option><option value="귀중">귀중</option></select></label>
           <label>글꼴 크기 <output id="font-size-output">11pt</output><input id="font-size" type="range" min="8" max="16" value="11" /></label>
           <label>글꼴 굵기<select id="font-weight"><option value="normal">보통</option><option value="bold">굵게</option></select></label>
@@ -59,6 +59,7 @@
       <section id="preview-section" class="card hidden" aria-labelledby="preview-title">
         <div class="section-heading"><span>4</span><div><h2 id="preview-title">미리보기</h2><p id="preview-summary">첫 페이지를 표시합니다.</p></div></div>
         <div class="preview-tools"><button id="previous-page" class="secondary">이전 페이지</button><span id="page-indicator"></span><button id="next-page" class="secondary">다음 페이지</button></div>
+        <p id="geometry-debug-readout" class="geometry-debug-readout hidden" role="status"></p>
         <section id="preview-edit" class="preview-edit hidden" aria-live="polite">
           <div><strong id="preview-edit-title">라벨 수정</strong><p>미리보기의 <strong>수정</strong> 버튼을 눌러 한 건씩 내용을 바로 고칠 수 있습니다. 수정한 내용은 PDF와 인쇄에도 반영됩니다.</p></div>
           <div class="preview-edit-fields">
@@ -75,6 +76,11 @@
         <div class="preview-wrap"><div id="paper-preview" class="paper-preview" aria-label="A4 라벨 미리보기"></div></div>
       </section>
     </main>
+    <aside class="feedback-float" aria-label="사용자 의견 보내기">
+      <a id="feedback-link" class="feedback-button" data-feedback-link target="_blank" rel="noopener noreferrer">
+        <span>피드백 보내기</span><small>불편·인쇄오차 제보</small>
+      </a>
+    </aside>
     <div id="toast" role="status" aria-live="polite"></div>
     <script type="module" src="/src/main.js"></script>
   </body>

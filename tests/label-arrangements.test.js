@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { labelContent, layoutArrangement, LABEL_ARRANGEMENTS } from '../src/label-arrangements.js';
 import { labelGeometry, presetTemplate } from '../src/templates.js';
+import { LABEL_PADDING_MM } from '../src/pdf-layout.js';
 
 const font = { widthOfTextAtSize: (text, size) => [...text].length * size * 0.6 };
 const fonts = { regular: font, bold: font };
@@ -16,6 +17,15 @@ test('basic arrangement is the default and keeps name, address, postcode in orde
   assert.equal(result.items[0].text, '홍길동');
   assert.equal(result.items.at(-1).text, '02700');
   assert.ok(result.items[0].top < result.items.at(-1).top);
+});
+
+test('label box starts at the preset top while text starts after the shared 2.5mm internal padding', () => {
+  const template = presetTemplate('formtec', '3108');
+  const box = labelGeometry(template, 0, 0);
+  const result = layoutArrangement(labelContent(row, design), fonts, design, box);
+  assert.equal(box.y, 13.801);
+  assert.ok(Math.abs(result.items[0].top - LABEL_PADDING_MM * 72 / 25.4) < 1e-9);
+  assert.ok(Math.abs(box.y + result.items[0].top * 25.4 / 72 - 16.301) < 1e-9);
 });
 
 test('all four arrangements fit ordinary content and render distinguishing elements', () => {

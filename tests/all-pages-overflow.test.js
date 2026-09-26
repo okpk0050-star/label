@@ -16,6 +16,7 @@ test('preflight finds overflow on a later PDF page and identifies the source row
   assert.equal(layouts[21].page, 2);
   assert.equal(layouts[21].slot, 1);
   assert.equal(layouts[21].row.sourceRow, 22);
+  assert.equal(layouts[0].box.y, template.startY);
 });
 
 test('preflight also detects an overflowing label on page three', () => {
