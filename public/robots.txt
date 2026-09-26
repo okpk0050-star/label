@@ -1,0 +1,4 @@
+User-agent: *
+Allow: /
+
+Sitemap: https://postal-label-service.pages.dev/sitemap.xml

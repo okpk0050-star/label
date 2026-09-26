@@ -3,12 +3,27 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <meta name="description" content="엑셀 또는 CSV 주소 데이터를 브라우저에서 안전하게 우편 라벨 PDF로 만듭니다." />
-    <title>우편 라벨 만들기 | 엑셀 주소 라벨 PDF</title>
+    <meta name="description" content="엑셀·CSV 주소록을 붙여넣거나 파일로 불러와 폼텍·애니라벨용 A4 우편 라벨 PDF를 만드세요. 자동 인식 결과를 확인·수정하고 첫 출력 칸을 선택할 수 있습니다. 설치·회원가입 없이 이용합니다." />
+    <link rel="canonical" href="https://postal-label-service.pages.dev/" />
+    <meta property="og:type" content="website" />
+    <meta property="og:locale" content="ko_KR" />
+    <meta property="og:title" content="엑셀 주소 라벨 만들기 | 폼텍·애니라벨 PDF 출력" />
+    <meta property="og:description" content="엑셀·CSV 주소록을 붙여넣거나 파일로 불러와 폼텍·애니라벨용 A4 우편 라벨 PDF를 만드세요. 자동 인식 결과를 확인·수정하고 첫 출력 칸을 선택할 수 있습니다. 설치·회원가입 없이 이용합니다." />
+    <meta property="og:url" content="https://postal-label-service.pages.dev/" />
+    <meta name="twitter:card" content="summary" />
+    <meta name="twitter:title" content="엑셀 주소 라벨 만들기 | 폼텍·애니라벨 PDF 출력" />
+    <meta name="twitter:description" content="엑셀·CSV 주소록을 붙여넣거나 파일로 불러와 폼텍·애니라벨용 A4 우편 라벨 PDF를 만드세요. 자동 인식 결과를 확인·수정하고 첫 출력 칸을 선택할 수 있습니다. 설치·회원가입 없이 이용합니다." />
+    <title>엑셀 주소 라벨 만들기 | 폼텍·애니라벨 PDF 출력</title>
   </head>
   <body>
     <main class="shell">
-      <header class="hero"><p class="eyebrow">우편 라벨 만들기</p><h1>엑셀 주소를 그대로 붙여넣으세요.</h1><p class="hero-lead">자동으로 정리해서 라벨 PDF를 만들어드립니다.</p><p class="hero-benefits">회원가입 없음 · 설치 없음 · 서버 전송 없음</p><p class="privacy">주소 데이터는 이 브라우저 안에서만 처리하며 서버에 전송하거나 저장하지 않습니다.</p></header>
+      <header class="hero"><p class="eyebrow">우편 라벨 만들기</p><h1>엑셀 주소를 붙여넣고, 우편 라벨 PDF로 만드세요</h1><p class="hero-lead">이름·우편번호·주소 열을 자동으로 인식합니다. 결과를 확인하고 폼텍·애니라벨 제품번호를 선택하면 A4 출력용 PDF를 만들 수 있습니다.</p><p class="hero-benefits">회원가입 없음 · 설치 없음 · 서버 전송 없음</p><p class="privacy">입력한 주소 데이터는 브라우저에서 처리하며 서비스 서버로 전송하거나 저장하지 않습니다.</p></header>
+
+      <section class="card public-info" aria-labelledby="supported-labels-title">
+        <h2 id="supported-labels-title">지원 라벨 규격</h2>
+        <div class="supported-labels-grid"><p><strong>폼텍</strong><span>3105 · 3106 · 3107 · 3108 · 3109 · 3212 · 3218 · 3219 · 3620</span></p><p><strong>애니라벨</strong><span>V3240 · V3230 · V3330 · V3340 · V3260</span></p></div>
+        <p class="public-note">목록에 없는 용지도 고급 설정의 사용자 지정 규격으로 직접 입력할 수 있습니다.</p>
+      </section>
 
       <section class="card" aria-labelledby="input-title">
         <div class="section-heading"><span>1</span><div><h2 id="input-title">데이터 입력</h2><p>엑셀에서 이름·우편번호·주소를 복사해 아래에 붙여넣으세요. 파일 선택도 가능합니다.</p></div></div>
@@ -74,6 +89,30 @@
         <div class="print-checklist"><strong>인쇄 전 확인</strong><span><span id="paper-guidance">용지 A4</span> · 배율 100% / 실제 크기 · “페이지에 맞춤” 해제</span></div>
         <div class="button-row export-row"><button id="export-pdf" class="primary">PDF 만들기</button><button id="print-preview" class="secondary">현재 페이지 인쇄</button><p>라벨지에 인쇄하기 전, 일반 A4 용지로 위치를 확인해보세요.</p></div>
         <div class="preview-wrap"><div id="paper-preview" class="paper-preview" aria-label="A4 라벨 미리보기"></div></div>
+      </section>
+
+      <section class="card public-info" aria-labelledby="how-to-title">
+        <h2 id="how-to-title">엑셀 주소 라벨 만드는 방법</h2>
+        <ol class="how-to-list"><li><strong>주소록을 불러옵니다.</strong><span>엑셀 주소록을 붙여넣거나 `.xlsx`, `.xls`, `.csv` 파일을 선택하세요.</span></li><li><strong>데이터와 라벨지를 확인합니다.</strong><span>이름·우편번호·주소를 확인하고, 라벨 품번과 첫 출력 칸을 선택하세요.</span></li><li><strong>미리보기 후 PDF를 만듭니다.</strong><span>인쇄할 때는 A4 용지와 배율 100% 또는 실제 크기를 선택하세요.</span></li></ol>
+      </section>
+
+      <section class="card public-info" aria-labelledby="about-title">
+        <h2 id="about-title">엑셀 주소록을 라벨 PDF로</h2>
+        <p>거래처 안내문이나 회원 우편물을 보낼 때, 한글이나 워드 메일머지 없이 엑셀 주소록을 라벨 PDF로 만들 수 있습니다. 이름과 주소가 열로 나뉜 목록뿐 아니라 일부 한 칸에 합쳐진 수신인 정보도 인식합니다.</p>
+        <p>자동 인식 결과를 확인하고 필요하면 미리보기에서 한 건씩 수정하세요. 이미 사용한 라벨지가 있다면 첫 출력 위치를 지정해 남은 칸부터 출력할 수 있습니다.</p>
+      </section>
+
+      <section class="card public-info" aria-labelledby="faq-title">
+        <h2 id="faq-title">자주 묻는 질문</h2>
+        <div class="faq-list">
+          <details><summary>한글이나 워드가 필요한가요?</summary><p>라벨 PDF를 만들 때는 필요하지 않습니다. 이 서비스에서 주소 데이터를 불러와 PDF를 만든 뒤 인쇄할 수 있습니다.</p></details>
+          <details><summary>엑셀 열 순서가 달라도 되나요?</summary><p>이름·우편번호·주소·상세주소 열을 자동으로 인식합니다. 결과가 다르면 데이터 확인 단계에서 각 열을 직접 선택할 수 있습니다.</p></details>
+          <details><summary>한 칸에 이름과 주소가 같이 있어도 되나요?</summary><p>일부 합쳐진 수신인 정보는 이름·주소·상세주소·우편번호로 나누어 인식합니다. 결과를 확인하고 필요한 경우 수정하세요.</p></details>
+          <details><summary>우편번호도 찾아주나요?</summary><p>우편번호를 외부에서 조회하지는 않습니다. 입력된 우편번호의 형식을 정리하고, 엑셀에서 앞자리 0이 빠진 일부 값은 복원할 수 있습니다.</p></details>
+          <details><summary>쓰다 남은 라벨지의 중간 칸부터 시작할 수 있나요?</summary><p>가능합니다. 라벨 규격을 선택한 뒤 첫 출력 위치에서 첫 페이지의 시작 칸을 지정하세요.</p></details>
+          <details><summary>입력한 주소는 저장되나요?</summary><p>입력한 주소 데이터는 브라우저에서 처리하며 서비스 서버로 전송하거나 저장하지 않습니다. 피드백 보내기는 Google Forms로 열리는 별도 동선입니다.</p></details>
+          <details><summary>PDF가 라벨 칸과 어긋나면 어떻게 하나요?</summary><p>인쇄 대화상자에서 A4와 배율 100% 또는 실제 크기를 선택하고 “페이지에 맞춤”을 해제하세요. 전체 위치가 밀리면 고급 설정에서 가로·세로 위치를 조정할 수 있습니다.</p></details>
+        </div>
       </section>
     </main>
     <aside class="feedback-float" aria-label="사용자 의견 보내기">
