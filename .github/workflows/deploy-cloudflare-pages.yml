@@ -21,7 +21,9 @@ jobs:
     env:
       CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
       CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-      PAGES_PROJECT: ${{ vars.CLOUDFLARE_PAGES_PROJECT }}
+      # Keep the existing Pages project as the safe default. The repository
+      # variable can still override it for an intentional future migration.
+      PAGES_PROJECT: ${{ vars.CLOUDFLARE_PAGES_PROJECT || 'postal-label-service' }}
       DEPLOY_BRANCH: ${{ github.event_name == 'pull_request' && format('pr-{0}', github.event.pull_request.number) || github.ref_name }}
     steps:
       - name: Check out source
@@ -41,6 +43,13 @@ jobs:
 
       - name: Build site
         run: npm run build
+
+      - name: Validate Cloudflare deployment configuration
+        shell: bash
+        run: |
+          test -n "$CLOUDFLARE_API_TOKEN" || { echo "::error title=Missing GitHub Secret::CLOUDFLARE_API_TOKEN Secret is required for Cloudflare Pages deployment."; exit 1; }
+          test -n "$CLOUDFLARE_ACCOUNT_ID" || { echo "::error title=Missing GitHub Secret::CLOUDFLARE_ACCOUNT_ID Secret is required for Cloudflare Pages deployment."; exit 1; }
+          test -n "$PAGES_PROJECT" || { echo "::error title=Missing Pages project::Set CLOUDFLARE_PAGES_PROJECT to the existing Cloudflare Pages project name."; exit 1; }
 
       - name: Deploy to Cloudflare Pages
         # Forked pull requests cannot access repository secrets; they still run tests and build.
